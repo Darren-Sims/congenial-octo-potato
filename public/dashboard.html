@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Analytics</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6; /* pageviews */
+    --series-2:       #eb6834; /* visitors */
+    --bar-fill:       #cde2fb; /* sequential step 100 */
+    --bar-fill-strong:#3987e5; /* sequential step 400 */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --baseline:       #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1:       #3987e5;
+      --series-2:       #d95926;
+      --bar-fill:       #184f95;
+      --bar-fill-strong:#3987e5;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1:      #1a1a19;
+    --page-plane:     #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #2c2c2a;
+    --baseline:       #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1:       #3987e5;
+    --series-2:       #d95926;
+    --bar-fill:       #184f95;
+    --bar-fill-strong:#3987e5;
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--page-plane);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  body { padding: 24px 16px 64px; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  header.top {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 20px;
+  }
+  header.top h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  header.top .sub { color: var(--text-secondary); font-size: 13px; margin-top: 2px; }
+
+  .controls { display: flex; gap: 8px; align-items: center; }
+  select, button.theme-toggle {
+    font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px;
+  }
+  .tile .label { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+  .tile .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .tile .value { font-size: 28px; font-weight: 600; margin-top: 4px; font-variant-numeric: proportional-nums; }
+
+  .panel {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .panel h2 { font-size: 13px; font-weight: 600; margin: 0 0 12px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.02em; }
+
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  .chart-wrap { position: relative; }
+  svg.chart { width: 100%; height: 220px; display: block; overflow: visible; }
+  .gridline { stroke: var(--gridline); stroke-width: 1; }
+  .axis-label { fill: var(--text-muted); font-size: 10px; }
+  .line-path { fill: none; stroke-width: 2; }
+  .hover-line { stroke: var(--baseline); stroke-width: 1; }
+  .tooltip {
+    position: absolute; pointer-events: none; background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+    font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.12); white-space: nowrap;
+    transform: translate(-50%, -110%); display: none; z-index: 5;
+  }
+  .tooltip .t-date { color: var(--text-secondary); margin-bottom: 4px; }
+  .tooltip .t-row { display: flex; align-items: center; gap: 6px; }
+  .tooltip .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 700px) { .grid-2 { grid-template-columns: 1fr; } }
+
+  .bar-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 6px 0; position: relative; font-size: 13px; }
+  .bar-row .name { position: relative; z-index: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 6px; }
+  .bar-row .count { position: relative; z-index: 1; color: var(--text-secondary); font-variant-numeric: tabular-nums; padding-right: 6px; }
+  .bar-row .bar { position: absolute; left: 0; top: 0; bottom: 0; background: var(--bar-fill); border-radius: 4px; z-index: 0; }
+  .empty { color: var(--text-muted); font-size: 13px; padding: 12px 0; }
+
+  .gate {
+    max-width: 360px; margin: 80px auto; text-align: center;
+  }
+  .gate input {
+    font: inherit; font-size: 14px; padding: 10px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--surface-1); color: var(--text-primary);
+    width: 100%; margin-top: 12px;
+  }
+  .gate button {
+    font: inherit; font-size: 14px; padding: 10px 12px; border-radius: 8px;
+    border: none; background: var(--series-1); color: white; margin-top: 10px; width: 100%; cursor: pointer;
+  }
+  .gate .err { color: #d03b3b; font-size: 13px; margin-top: 8px; min-height: 1em; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="gate" class="gate">
+    <h1>Analytics</h1>
+    <p class="sub" style="color:var(--text-secondary)">Enter your access token to view stats.</p>
+    <input id="tokenInput" type="password" placeholder="Access token" autocomplete="off" />
+    <button id="gateSubmit">View dashboard</button>
+    <div class="err" id="gateErr"></div>
+  </div>
+
+  <div id="app" class="hidden">
+    <header class="top">
+      <div>
+        <h1 id="siteTitle">Analytics</h1>
+        <div class="sub" id="rangeLabel"></div>
+      </div>
+      <div class="controls">
+        <select id="rangeSelect">
+          <option value="7">Last 7 days</option>
+          <option value="30" selected>Last 30 days</option>
+          <option value="90">Last 90 days</option>
+        </select>
+        <button class="theme-toggle" id="themeToggle" title="Toggle theme">◐</button>
+      </div>
+    </header>
+
+    <div class="tiles">
+      <div class="tile">
+        <div class="label"><span class="dot" style="background:var(--series-1)"></span>Pageviews</div>
+        <div class="value" id="tilePageviews">–</div>
+      </div>
+      <div class="tile">
+        <div class="label"><span class="dot" style="background:var(--series-2)"></span>Visitors</div>
+        <div class="value" id="tileVisitors">–</div>
+      </div>
+      <div class="tile">
+        <div class="label">Top page</div>
+        <div class="value" id="tileTopPage" style="font-size:16px; font-weight:500;">–</div>
+      </div>
+      <div class="tile">
+        <div class="label">Top referrer</div>
+        <div class="value" id="tileTopRef" style="font-size:16px; font-weight:500;">–</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Trend</h2>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--series-1)"></span>Pageviews</span>
+        <span><span class="dot" style="background:var(--series-2)"></span>Visitors</span>
+      </div>
+      <div class="chart-wrap">
+        <svg class="chart" id="chart" viewBox="0 0 800 220" preserveAspectRatio="none"></svg>
+        <div class="tooltip" id="tooltip"></div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel"><h2>Top pages</h2><div id="listPages"></div></div>
+      <div class="panel"><h2>Top referrers</h2><div id="listReferrers"></div></div>
+      <div class="panel"><h2>Devices</h2><div id="listDevices"></div></div>
+      <div class="panel"><h2>Browsers</h2><div id="listBrowsers"></div></div>
+      <div class="panel"><h2>Operating system</h2><div id="listOS"></div></div>
+      <div class="panel"><h2>Countries</h2><div id="listCountries"></div></div>
+    </div>
+
+    <div class="panel" id="campaignsPanel" style="display:none;">
+      <h2>Campaigns (UTM)</h2>
+      <div id="listCampaigns"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var TOKEN_KEY = 'analytics_token';
+  var SITE = new URLSearchParams(location.search).get('site') || null;
+
+  var gate = document.getElementById('gate');
+  var app = document.getElementById('app');
+  var gateErr = document.getElementById('gateErr');
+
+  function getToken() {
+    return localStorage.getItem(TOKEN_KEY) || new URLSearchParams(location.search).get('token') || '';
+  }
+  function setToken(t) { localStorage.setItem(TOKEN_KEY, t); }
+
+  document.getElementById('gateSubmit').addEventListener('click', function () {
+    var t = document.getElementById('tokenInput').value.trim();
+    if (!t) return;
+    setToken(t);
+    boot();
+  });
+  document.getElementById('tokenInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') document.getElementById('gateSubmit').click();
+  });
+
+  document.getElementById('themeToggle').addEventListener('click', function () {
+    var cur = document.documentElement.getAttribute('data-theme');
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('analytics_theme', next);
+    renderChart(window.__lastStats); // repaint with new CSS vars
+  });
+  (function initTheme() {
+    var saved = localStorage.getItem('analytics_theme');
+    if (saved) document.documentElement.setAttribute('data-theme', saved);
+  })();
+
+  var rangeSelect = document.getElementById('rangeSelect');
+  rangeSelect.addEventListener('change', function () { load(); });
+
+  function cssVar(name) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  }
+
+  function fmt(n) { return new Intl.NumberFormat().format(n || 0); }
+
+  function fetchStats() {
+    var range = rangeSelect.value;
+    var url = '/api/stats?range=' + encodeURIComponent(range) + (SITE ? '&site=' + encodeURIComponent(SITE) : '');
+    return fetch(url, { headers: { Authorization: 'Bearer ' + getToken() } }).then(function (res) {
+      if (res.status === 401) throw new Error('unauthorized');
+      if (!res.ok) throw new Error('request failed');
+      return res.json();
+    });
+  }
+
+  function renderList(el, rows, nameKey, countKey, formatName) {
+    el.innerHTML = '';
+    if (!rows || !rows.length) {
+      el.innerHTML = '<div class="empty">No data yet</div>';
+      return;
+    }
+    var max = Math.max.apply(null, rows.map(function (r) { return r[countKey]; }));
+    rows.forEach(function (r) {
+      var pct = max ? (r[countKey] / max) * 100 : 0;
+      var row = document.createElement('div');
+      row.className = 'bar-row';
+      var name = formatName ? formatName(r) : (r[nameKey] || 'Unknown');
+      row.innerHTML =
+        '<div class="bar" style="width:' + pct + '%"></div>' +
+        '<div class="name" title="' + escapeHtml(name) + '">' + escapeHtml(name) + '</div>' +
+        '<div class="count">' + fmt(r[countKey]) + '</div>';
+      el.appendChild(row);
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  function renderChart(stats) {
+    if (!stats) return;
+    var svg = document.getElementById('chart');
+    var tooltip = document.getElementById('tooltip');
+    var W = 800, H = 220, padL = 34, padR = 8, padT = 10, padB = 20;
+    var days = stats.byDay || [];
+    svg.innerHTML = '';
+
+    var innerW = W - padL - padR, innerH = H - padT - padB;
+    var maxV = Math.max(1, ...days.map(function (d) { return Math.max(d.pageviews, d.visitors); }));
+    var niceMax = niceCeil(maxV);
+
+    var ns = 'http://www.w3.org/2000/svg';
+    function el(tag, attrs) {
+      var e = document.createElementNS(ns, tag);
+      for (var k in attrs) e.setAttribute(k, attrs[k]);
+      return e;
+    }
+
+    // gridlines (recessive) + y labels
+    var steps = 4;
+    for (var i = 0; i <= steps; i++) {
+      var y = padT + innerH - (innerH * i) / steps;
+      svg.appendChild(el('line', { x1: padL, x2: W - padR, y1: y, y2: y, class: 'gridline' }));
+      var label = el('text', { x: 4, y: y + 3, class: 'axis-label' });
+      label.textContent = fmt(Math.round((niceMax * i) / steps));
+      svg.appendChild(label);
+    }
+
+    if (days.length === 0) {
+      var msg = el('text', { x: W / 2, y: H / 2, 'text-anchor': 'middle', class: 'axis-label' });
+      msg.textContent = 'No data yet';
+      svg.appendChild(msg);
+      return;
+    }
+
+    function xFor(i) { return padL + (days.length === 1 ? innerW / 2 : (innerW * i) / (days.length - 1)); }
+    function yFor(v) { return padT + innerH - (innerH * v) / niceMax; }
+
+    function pathFor(key) {
+      return days.map(function (d, i) { return (i === 0 ? 'M' : 'L') + xFor(i) + ',' + yFor(d[key]); }).join(' ');
+    }
+
+    var p1 = el('path', { d: pathFor('pageviews'), class: 'line-path', stroke: cssVar('--series-1'), 'stroke-linecap': 'round' });
+    var p2 = el('path', { d: pathFor('visitors'), class: 'line-path', stroke: cssVar('--series-2'), 'stroke-linecap': 'round' });
+    svg.appendChild(p1);
+    svg.appendChild(p2);
+
+    // x-axis date labels (first, middle, last)
+    [0, Math.floor((days.length - 1) / 2), days.length - 1].forEach(function (i) {
+      if (i < 0 || i >= days.length) return;
+      var t = el('text', { x: xFor(i), y: H - 4, class: 'axis-label', 'text-anchor': i === 0 ? 'start' : (i === days.length - 1 ? 'end' : 'middle') });
+      t.textContent = days[i].day.slice(5);
+      svg.appendChild(t);
+    });
+
+    // hover layer
+    var hoverLine = el('line', { class: 'hover-line', y1: padT, y2: padT + innerH, x1: -100, x2: -100 });
+    svg.appendChild(hoverLine);
+    var dot1 = el('circle', { r: 3.5, fill: cssVar('--series-1'), cx: -100, cy: -100 });
+    var dot2 = el('circle', { r: 3.5, fill: cssVar('--series-2'), cx: -100, cy: -100 });
+    svg.appendChild(dot1);
+    svg.appendChild(dot2);
+
+    var hitRect = el('rect', { x: padL, y: padT, width: innerW, height: innerH, fill: 'transparent' });
+    hitRect.style.cursor = 'crosshair';
+    svg.appendChild(hitRect);
+
+    hitRect.addEventListener('mousemove', function (evt) {
+      var rect = svg.getBoundingClientRect();
+      var scaleX = W / rect.width;
+      var mx = (evt.clientX - rect.left) * scaleX;
+      var idx = Math.round(((mx - padL) / innerW) * (days.length - 1));
+      idx = Math.max(0, Math.min(days.length - 1, idx));
+      var d = days[idx];
+      var x = xFor(idx);
+      hoverLine.setAttribute('x1', x); hoverLine.setAttribute('x2', x);
+      dot1.setAttribute('cx', x); dot1.setAttribute('cy', yFor(d.pageviews));
+      dot2.setAttribute('cx', x); dot2.setAttribute('cy', yFor(d.visitors));
+
+      var svgRect = svg.getBoundingClientRect();
+      var px = svgRect.left + (x / W) * svgRect.width;
+      var py = svgRect.top + (yFor(d.pageviews) / H) * svgRect.height;
+      tooltip.style.left = (px - svg.getBoundingClientRect().left) + 'px';
+      tooltip.style.top = (py - svg.getBoundingClientRect().top) + 'px';
+      tooltip.style.display = 'block';
+      tooltip.innerHTML =
+        '<div class="t-date">' + d.day + '</div>' +
+        '<div class="t-row"><span class="dot" style="background:' + cssVar('--series-1') + '"></span>Pageviews: ' + fmt(d.pageviews) + '</div>' +
+        '<div class="t-row"><span class="dot" style="background:' + cssVar('--series-2') + '"></span>Visitors: ' + fmt(d.visitors) + '</div>';
+    });
+    hitRect.addEventListener('mouseleave', function () {
+      tooltip.style.display = 'none';
+      hoverLine.setAttribute('x1', -100); hoverLine.setAttribute('x2', -100);
+      dot1.setAttribute('cx', -100); dot2.setAttribute('cx', -100);
+    });
+  }
+
+  function niceCeil(v) {
+    var pow = Math.pow(10, Math.floor(Math.log10(Math.max(1, v))));
+    var n = v / pow;
+    var niceN = n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10;
+    return niceN * pow;
+  }
+
+  function render(stats) {
+    window.__lastStats = stats;
+    document.getElementById('siteTitle').textContent = stats.site;
+    document.getElementById('rangeLabel').textContent = 'Since ' + stats.since + ' (UTC)';
+    document.getElementById('tilePageviews').textContent = fmt(stats.totals.pageviews);
+    document.getElementById('tileVisitors').textContent = fmt(stats.totals.visitors);
+    document.getElementById('tileTopPage').textContent = (stats.topPages[0] && stats.topPages[0].path) || '–';
+    document.getElementById('tileTopRef').textContent = (stats.topReferrers[0] && stats.topReferrers[0].referrer_domain) || '–';
+
+    renderChart(stats);
+    renderList(document.getElementById('listPages'), stats.topPages, 'path', 'pageviews');
+    renderList(document.getElementById('listReferrers'), stats.topReferrers, 'referrer_domain', 'pageviews');
+    renderList(document.getElementById('listDevices'), stats.devices, 'device', 'pageviews', function (r) { return (r.device || 'unknown'); });
+    renderList(document.getElementById('listBrowsers'), stats.browsers, 'browser', 'pageviews');
+    renderList(document.getElementById('listOS'), stats.os, 'os', 'pageviews');
+    renderList(document.getElementById('listCountries'), stats.countries, 'country', 'pageviews');
+
+    if (stats.campaigns && stats.campaigns.length) {
+      document.getElementById('campaignsPanel').style.display = '';
+      renderList(document.getElementById('listCampaigns'), stats.campaigns, null, 'pageviews', function (r) {
+        return [r.utm_source, r.utm_medium, r.utm_campaign].filter(Boolean).join(' / ');
+      });
+    }
+  }
+
+  function load() {
+    fetchStats().then(render).catch(function (err) {
+      if (err.message === 'unauthorized') {
+        localStorage.removeItem(TOKEN_KEY);
+        showGate('That token was rejected.');
+      } else {
+        showGate('Could not load stats: ' + err.message);
+      }
+    });
+  }
+
+  function showGate(err) {
+    gate.classList.remove('hidden');
+    app.classList.add('hidden');
+    gateErr.textContent = err || '';
+  }
+
+  function boot() {
+    var t = getToken();
+    if (!t) { showGate(); return; }
+    gate.classList.add('hidden');
+    app.classList.remove('hidden');
+    load();
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

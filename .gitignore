@@ -1,0 +1,3 @@
+local.kv*
+.env
+*.log
